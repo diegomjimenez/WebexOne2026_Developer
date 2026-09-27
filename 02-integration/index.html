@@ -9,6 +9,7 @@
         button { background-color: #00a0d1; color: white; border: none; cursor: pointer; font-weight: bold; }
         button:hover { background-color: #007aa3; }
         button, select, input { width: 100%; padding: 10px; margin-top: 10px; margin-bottom: 10px; border-radius: 4px; border: 1px solid #ccc; box-sizing: border-box; }
+        #status { font-weight: bold; margin-top: 15px; }
     </style>
 </head>
 <body>
@@ -41,8 +42,9 @@
         // ---------------------
 
         function login() {
-            // Using response_type=token for the Implicit Grant flow
-            const authUrl = `https://webexapis.com/v1/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=spark:rooms_read%20spark:messages_write`;
+            // Requesting the scopes we configured for the integration
+            const scopes = 'spark:people_read spark:rooms_read spark:messages_write spark:messages_read';
+            const authUrl = `https://webexapis.com/v1/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
             window.location.href = authUrl;
         }
 
@@ -51,28 +53,72 @@
         let token = null;
         
         if (hash.includes('access_token')) {
-            const params = new URLSearchParams(hash.substring(1));
+            // Parse the hash parameters
+            const hashString = hash.substring(1).replace(/\/$/, '');
+            const params = new URLSearchParams(hashString);
             token = params.get('access_token');
             
-            document.getElementById('login-section').classList.add('hidden');
-            document.getElementById('app-section').classList.remove('hidden');
-            
-            loadRooms();
+            if (token) {
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('app-section').classList.remove('hidden');
+                
+                loadRooms();
+            } else {
+                document.getElementById('status').innerText = "Failed to parse token from URL.";
+                document.getElementById('status').style.color = "red";
+            }
         }
 
         async function loadRooms() {
-            const response = await fetch('https://webexapis.com/v1/rooms', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const data = await response.json();
+            const status = document.getElementById('status');
+            status.innerText = "Loading rooms...";
+            status.style.color = "black";
             
-            const select = document.getElementById('rooms');
-            data.items.forEach(room => {
-                const option = document.createElement('option');
-                option.value = room.id;
-                option.text = room.title;
-                select.appendChild(option);
-            });
+            try {
+                // Fetch the 50 most recent rooms
+                const response = await fetch('https://webexapis.com/v1/rooms?sortBy=lastactivity&max=50', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    console.error("API Error:", data);
+                    status.innerText = "Error loading rooms: " + (data.message || response.statusText);
+                    status.style.color = "red";
+                    return;
+                }
+                
+                const select = document.getElementById('rooms');
+                select.innerHTML = ''; // Clear any existing options
+                
+                if (data.items && data.items.length > 0) {
+                    data.items.forEach(room => {
+                        const option = document.createElement('option');
+                        option.value = room.id;
+                        // Some direct rooms might not have a title, so we provide a fallback
+                        option.text = room.title || "Untitled Room (Direct)";
+                        select.appendChild(option);
+                    });
+                    
+                    status.innerText = "Rooms loaded successfully!";
+                    status.style.color = "green";
+                    
+                    // Clear the success message after 2 seconds
+                    setTimeout(() => { 
+                        if(status.innerText === "Rooms loaded successfully!") {
+                            status.innerText = ""; 
+                        }
+                    }, 2000);
+                } else {
+                    status.innerText = "No rooms found for this account.";
+                    status.style.color = "orange";
+                }
+            } catch (error) {
+                console.error("Fetch Error:", error);
+                status.innerText = "Network error while loading rooms. Check console.";
+                status.style.color = "red";
+            }
         }
 
         async function sendMessage() {
@@ -80,23 +126,44 @@
             const text = document.getElementById('message').value;
             const status = document.getElementById('status');
             
+            if (!roomId) {
+                status.innerText = "Please select a room first.";
+                status.style.color = "red";
+                return;
+            }
+            if (!text) {
+                status.innerText = "Please enter a message.";
+                status.style.color = "red";
+                return;
+            }
+            
             status.innerText = "Sending...";
             status.style.color = "black";
             
-            const response = await fetch('https://webexapis.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ roomId: roomId, text: text })
-            });
-            
-            if (response.ok) {
-                status.innerText = "Message sent successfully!";
-                status.style.color = "green";
-            } else {
-                status.innerText = "Failed to send message.";
+            try {
+                const response = await fetch('https://webexapis.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ roomId: roomId, text: text })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    status.innerText = "Message sent successfully!";
+                    status.style.color = "green";
+                    document.getElementById('message').value = ''; // Clear input
+                } else {
+                    console.error("Send Message Error:", data);
+                    status.innerText = "Failed to send message: " + (data.message || response.statusText);
+                    status.style.color = "red";
+                }
+            } catch (error) {
+                console.error("Send Message Fetch Error:", error);
+                status.innerText = "Network error while sending message.";
                 status.style.color = "red";
             }
         }
