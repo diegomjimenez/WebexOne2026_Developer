@@ -1,4 +1,12 @@
-"""Paginate through organization users."""
+"""
+Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+
+- Diego Manuel Jimenez Moreno
+- Phil Bellanti
+- Adam Weeks
+
+Paginate through organization users.
+"""
 
 import os
 
