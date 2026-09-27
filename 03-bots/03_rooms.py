@@ -9,7 +9,6 @@ Create a room and add your lab user to it.
 """
 
 import os
-
 from dotenv import load_dotenv
 from webexpythonsdk import WebexAPI
 
