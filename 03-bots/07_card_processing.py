@@ -1,4 +1,12 @@
-"""Exercise 3.7 - Process Adaptive Card submissions."""
+"""
+Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+
+- Diego Manuel Jimenez Moreno
+- Phil Bellanti
+- Adam Weeks
+
+Process Adaptive Card submissions.
+"""
 
 import os
 
