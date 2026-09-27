@@ -1,4 +1,12 @@
-"""Exercise 5.3 - End-user phone provisioning bot."""
+"""
+Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+
+- Diego Manuel Jimenez Moreno
+- Phil Bellanti
+- Adam Weeks
+
+Exercise 5.3 - End-user phone provisioning bot.
+"""
 
 import os
 import re
