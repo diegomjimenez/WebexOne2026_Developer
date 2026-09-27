@@ -50,40 +50,42 @@ def handle_message(message, activity):
     """
     room_id = message.roomId
     text = (getattr(message, "text", "") or "").strip().lower()
-    
+    # In group spaces the text starts with the bot mention, so only check the last word.
+    command = text.split()[-1] if text else ""
+
     # The keyword users type to activate this command.
-    if text == "message":
+    if command == "message":
         # Define the Adaptive Card structure for user input.
         card = {
-            "contentType": "application/vnd.microsoft.card.adaptive",
-            "content": {
-                "type": "AdaptiveCard",
-                "body": [
-                    {
-                        "type": "Input.Text",
-                        "placeholder": "Message",
-                        "id": "message",
-                        "isRequired": True,
-                        "errorMessage": "Message is required",
-                        "label": "Message:"
+            "type": "AdaptiveCard",
+            "body": [
+                {
+                    "type": "Input.Text",
+                    "placeholder": "Message",
+                    "id": "message",
+                    "isRequired": True,
+                    "errorMessage": "Message is required",
+                    "label": "Message:"
+                }
+            ],
+            "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "version": "1.3",
+            "actions": [
+                {
+                    "type": "Action.Submit",
+                    "title": "Submit",
+                    "data": {
+                        "callback_keyword": "message_callback" # This links to the card action handler.
                     }
-                ],
-                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                "version": "1.3",
-                "actions": [
-                    {
-                        "type": "Action.Submit",
-                        "title": "Submit",
-                        "data": {
-                            "callback_keyword": "message_callback" # This links to the card action handler.
-                        }
-                    }
-                ]
-            }
+                }
+            ]
         }
-        
+
         # Attach the Adaptive Card to the response.
         send_card(api, room_id, card, fallback_text="Please enter your message:")
+    else:
+        # Let the user know which keyword the bot understands.
+        send_message(api, room_id, "Type 'message' to get the card.")
 
 
 # Create a WebSocket Client object.
@@ -94,3 +96,4 @@ bot = WebSocketClient(access_token=bot_token,         # Authenticate the bot usi
 # Start the bot and make it listen for incoming messages.
 # This call is typically blocking and keeps the bot running, waiting for commands or card submissions.
 bot.run()
+
