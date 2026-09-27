@@ -1,4 +1,12 @@
-"""Send a direct message to yourself using the bot token."""
+"""
+Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+
+- Diego Manuel Jimenez Moreno
+- Phil Bellanti
+- Adam Weeks
+
+Send a direct message to yourself using the bot token.
+"""
 
 import os
 
