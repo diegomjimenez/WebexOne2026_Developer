@@ -80,7 +80,7 @@ def add_person_to_room(room_id: str, person_email: str):
         return None
 
 # Define the title for your new room.
-new_room_name = "WebexOne2025 Room"
+new_room_name = "WebexOne Room"
 
 # Step 1: Create the room
 created_room = create_webex_room(new_room_name)
