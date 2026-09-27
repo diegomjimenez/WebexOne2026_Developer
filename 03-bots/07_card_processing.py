@@ -1,5 +1,5 @@
 """
-Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+Webex One 2026 - Exploring the possibilities of Webex APIs
 
 - Diego Manuel Jimenez Moreno
 - Phil Bellanti
@@ -9,104 +9,89 @@ Process Adaptive Card submissions.
 """
 
 import os
-
-from bot_helpers import delete_message, extract_input_values, get_api, is_allowed_domain, send_card, send_message
 from dotenv import load_dotenv
 from websocket_client import WebSocketClient
+from bot_helpers import get_api, send_message, send_card, delete_message
 
+# Load environment variables from the .env file.
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-DOMAIN = os.getenv("DOMAIN", "")
-ALLOWED_DOMAINS = [DOMAIN] if DOMAIN else []
-COMMAND_KEYWORD = "message"
-api = get_api(BOT_TOKEN)
-
-MESSAGE_CARD = {
-    "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-    "type": "AdaptiveCard",
-    "version": "1.2",
-    "body": [
-        {
-            "type": "TextBlock",
-            "text": "Send a message",
-            "weight": "Bolder",
-            "size": "Medium",
-        },
-        {
-            "type": "TextBlock",
-            "text": "Enter a message below and click Submit.",
-            "wrap": True,
-        },
-        {
-            "type": "Input.Text",
-            "id": "message_typed",
-            "placeholder": "Type something here",
-            "maxLength": 120,
-            "isMultiline": True,
-        },
-    ],
-    "actions": [
-        {
-            "type": "Action.Submit",
-            "title": "Submit",
-            "data": {"callback_keyword": "submit_message"},
-        }
-    ],
-}
+# Webex Bot Token for authentication with the Webex API.
+bot_token = os.getenv("BOT_TOKEN")
+api = get_api(bot_token)
 
 
-def send_message_card(room_id: str) -> None:
-    send_card(api, room_id, MESSAGE_CARD, fallback_text="Send a message")
-
-
-def handle_message(message, activity) -> None:
-    room_id = message.roomId
-    person_email = getattr(message, "personEmail", "")
-    text = (getattr(message, "text", "") or "").strip().lower()
-
-    if ALLOWED_DOMAINS and not is_allowed_domain(person_email, ALLOWED_DOMAINS):
-        send_message(api, room_id, "Sorry, this bot is restricted to your lab domain.")
-        return
-
-    if text == COMMAND_KEYWORD:
-        send_message_card(room_id)
-        return
-
-    send_message(api, room_id, f"Send `{COMMAND_KEYWORD}` to open the card.")
-
-
-def handle_card_action(attachment_action, activity) -> None:
+def handle_card_action(attachment_action, activity):
+    """
+    Executes when an Adaptive Card with 'callback_keyword': 'message_callback' is submitted.
+    It extracts the message input from the card and sends it back to the user.
+    """
     room_id = attachment_action.roomId
-    person_email = getattr(attachment_action, "personEmail", "")
-    inputs = extract_input_values(attachment_action)
-    typed_message = inputs.get("message_typed", "").strip()
-
-    if ALLOWED_DOMAINS and not is_allowed_domain(person_email, ALLOWED_DOMAINS):
-        send_message(api, room_id, "Sorry, this bot is restricted to your lab domain.")
-        return
-
+    inputs = getattr(attachment_action, "inputs", {}) or {}
+    
+    # Extract the 'message' input from the submitted Adaptive Card's inputs.
+    message_content = inputs.get("message")
+    
+    # Deletes the Adaptive Card message after submission.
     if getattr(attachment_action, "messageId", None):
         delete_message(api, attachment_action.messageId)
-
-    if not typed_message:
-        send_message(api, room_id, "Please enter a message before submitting.")
-        send_message_card(room_id)
-        return
-
-    send_message(api, room_id, typed_message)
-    send_message(
-        api,
-        room_id,
-        f"> **Notification**\n> Your message has been sent:\n> \n> {typed_message}",
-    )
+        
+    # Create a direct message to the room with the extracted message content.
+    if message_content:
+        send_message(api, room_id, message_content)
+        # Return a confirmation message, formatted as an info quote.
+        send_message(api, room_id, "> **Info**\n> Message sent")
 
 
-if __name__ == "__main__":
-    bot = WebSocketClient(
-        access_token=BOT_TOKEN,
-        bot_name="WebexOne2026",
-        on_message=handle_message,
-        on_card_action=handle_card_action,
-    )
-    bot.run()
+def handle_message(message, activity):
+    """
+    Executes the 'message' command. Constructs and sends an Adaptive Card
+    to the user for input.
+    """
+    room_id = message.roomId
+    text = (getattr(message, "text", "") or "").strip().lower()
+    
+    # The keyword users type to activate this command.
+    if text == "message":
+        # Define the Adaptive Card structure for user input.
+        card = {
+            "contentType": "application/vnd.microsoft.card.adaptive",
+            "content": {
+                "type": "AdaptiveCard",
+                "body": [
+                    {
+                        "type": "Input.Text",
+                        "placeholder": "Message",
+                        "id": "message",
+                        "isRequired": True,
+                        "errorMessage": "Message is required",
+                        "label": "Message:"
+                    }
+                ],
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                "version": "1.3",
+                "actions": [
+                    {
+                        "type": "Action.Submit",
+                        "title": "Submit",
+                        "data": {
+                            "callback_keyword": "message_callback" # This links to the card action handler.
+                        }
+                    }
+                ]
+            }
+        }
+        
+        # Attach the Adaptive Card to the response.
+        send_card(api, room_id, card, fallback_text="Please enter your message:")
+
+
+# Create a WebSocket Client object.
+bot = WebSocketClient(access_token=bot_token,         # Authenticate the bot using its token.
+                      on_message=handle_message,      # Registers the message handler.
+                      on_card_action=handle_card_action) # Registers the callback command for card submissions.
+
+# Start the bot and make it listen for incoming messages.
+# This call is typically blocking and keeps the bot running, waiting for commands or card submissions.
+bot.run()
+
