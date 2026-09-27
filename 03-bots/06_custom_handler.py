@@ -1,4 +1,12 @@
-"""Exercise 3.6 - Create a custom handler with domain restriction."""
+"""
+Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+
+- Diego Manuel Jimenez Moreno
+- Phil Bellanti
+- Adam Weeks
+
+Create a custom handler with domain restriction.
+"""
 
 import os
 
