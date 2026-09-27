@@ -27,7 +27,7 @@ if not CLIENT_ID or not CLIENT_SECRET:
     sys.exit("CLIENT_ID and CLIENT_SECRET must be set in your .env file (see Lab 2).")
 
 PORT = 3000
-REDIRECT_URI = f"http://localhost:{PORT}/callback"
+REDIRECT_URI = f"http://localhost:{PORT}"
 # Must be a subset of the scopes checked when the integration was created.
 SCOPES = "spark:people_read spark:rooms_read spark:messages_write spark:messages_read"
 API = "https://webexapis.com/v1"
@@ -91,7 +91,7 @@ class Handler(BaseHTTPRequestHandler):
             }
             return self.redirect(f"{API}/authorize?{urlencode(params, quote_via=quote)}")
 
-        if url.path == "/callback":
+        if url.path == "/" and ("code" in query or "error" in query):
             if query.get("state", [None])[0] != session["state"]:
                 return self.send_page('<p class="error">Invalid state. Please try again.</p><a class="button" href="/login">Login with Webex</a>', 400)
             if "error" in query:
