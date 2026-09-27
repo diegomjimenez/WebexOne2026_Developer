@@ -1,4 +1,12 @@
-"""Exercise 5.2 - Organization feedback bot."""
+"""
+Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+
+- Diego Manuel Jimenez Moreno
+- Phil Bellanti
+- Adam Weeks
+
+Exercise 5.2 - Organization feedback bot.
+"""
 
 import os
 import sys
