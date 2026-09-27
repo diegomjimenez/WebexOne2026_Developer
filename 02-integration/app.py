@@ -14,7 +14,7 @@ import os
 import secrets
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 import requests
 from dotenv import load_dotenv
@@ -28,7 +28,8 @@ if not CLIENT_ID or not CLIENT_SECRET:
 
 PORT = 3000
 REDIRECT_URI = f"http://localhost:{PORT}/callback"
-SCOPES = "spark:people_read spark:rooms_read spark:messages_write"
+# Must be a subset of the scopes checked when the integration was created.
+SCOPES = "spark:people_read spark:rooms_read spark:messages_write spark:messages_read"
 API = "https://webexapis.com/v1"
 
 # Demo only: a single user's token kept in memory while the server runs.
@@ -88,7 +89,7 @@ class Handler(BaseHTTPRequestHandler):
                 "scope": SCOPES,
                 "state": session["state"],
             }
-            return self.redirect(f"{API}/authorize?{urlencode(params)}")
+            return self.redirect(f"{API}/authorize?{urlencode(params, quote_via=quote)}")
 
         if url.path == "/callback":
             if query.get("state", [None])[0] != session["state"]:
