@@ -8,120 +8,174 @@ Webex One 2026 - Exploring the Webex Developer Ecosystem
 Webex WebSocket client: register a device and deliver incoming message events.
 """
 
+from __future__ import annotations
+
 import asyncio
-import base64
 import json
 import logging
 import ssl
 import uuid
+from typing import Callable, Optional
 
 import certifi
 import requests
 import websockets
+from webexpythonsdk import WebexAPI
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
-API_URL = "https://webexapis.com/v1"
-# Host map for the org: used to find the WDM URL that issues Webex WebSocket devices.
-CATALOG_URL = "https://u2c.wbx2.com/u2c/api/v1/catalog?format=hostmap"
-# Payload Webex expects when creating a desktop "device" that can open Mercury.
+DEFAULT_U2C_URL = "https://u2c.wbx2.com/u2c/api/v1/catalog"
 DEVICE_DATA = {
-    "deviceName": "pywebsocket-client",
+    "deviceName": "webexone2026-bot",
     "deviceType": "DESKTOP",
     "localizedModel": "python",
     "model": "python",
-    "name": "python-spark-client",
-    "systemName": "python-spark-client",
-    "systemVersion": "0.1",
+    "name": "webexone2026-bot",
+    "systemName": "webexone2026-bot",
+    "systemVersion": "1.0",
 }
 
+ssl_context = ssl.create_default_context()
+ssl_context.load_verify_locations(certifi.where())
+
+MessageHandler = Callable[..., None]
+CardActionHandler = Callable[..., None]
+
+
 class WebSocketClient:
-    """Opens a Webex Mercury WebSocket and calls on_message(message) for each new post."""
-
-    def __init__(self, access_token, on_message):
+    def __init__(
+        self,
+        access_token: str,
+        bot_name: str = "WebexOne2026",
+        on_message: Optional[MessageHandler] = None,
+        on_card_action: Optional[CardActionHandler] = None,
+    ) -> None:
         self.access_token = access_token
-        self.on_message = on_message  # callback(message) for each incoming post
+        self.bot_name = bot_name
+        self.api = WebexAPI(access_token=access_token)
         self.session = requests.Session()
-        self.session.headers.update({"Authorization": f"Bearer {access_token}"})
-        self.me = self.session.get(f"{API_URL}/people/me").json()
-        self.cluster, _, self.person_uuid = base64.b64decode(self.me["id"] + "==").decode().split("/")[2:]
-        self.clusters = None
+        self.tracking_id = f"webexone2026_{uuid.uuid4()}"
+        self.session.headers.update(self._headers())
+        self.api._session.update_headers(self._headers())
+        self.on_message = on_message
+        self.on_card_action = on_card_action
+        self.device_info = None
+        self.device_url = self._get_device_url()
+        self.websocket = None
+        self.share_id = None
 
-    def _cluster_of(self, hydra_id):
-        return base64.b64decode(hydra_id + "==").decode().split("/")[2]
+    def _headers(self) -> dict:
+        sdk_ua = self.api._session.headers["User-Agent"]
+        return {
+            "Authorization": f"Bearer {self.access_token}",
+            "Content-Type": "application/json;charset=utf-8",
+            "User-Agent": f"WebexOne2026-Bot '{self.bot_name}' ({sdk_ua})",
+            "trackingid": self.tracking_id,
+        }
 
-    def _room_clusters(self):
-        clusters, url, params = [], f"{API_URL}/rooms", {"max": 100}
-        for _ in range(5):
-            response = self.session.get(url, params=params)
-            if not response.ok:
-                break
-            for room in response.json().get("items", []):
-                cluster = self._cluster_of(room["id"])
-                if cluster not in clusters:
-                    clusters.append(cluster)
-            url = response.links.get("next", {}).get("url")
-            if not url:
-                break
-            params = None
-        return clusters
+    def _get_device_url(self) -> str:
+        response = self.session.get(DEFAULT_U2C_URL, params={"format": "hostmap"})
+        response.raise_for_status()
+        return response.json()["serviceLinks"]["wdm"]
 
-    def _candidate_clusters(self, activity):
-        # The event's own cluster first, then the bot's, then the clusters its spaces live in.
-        candidates = []
-        for node in (activity, activity.get("target"), activity.get("object")):
-            global_id = node.get("globalId") if isinstance(node, dict) else None
-            if isinstance(global_id, str) and "/" in global_id:
-                candidates.append(global_id.split("/")[0])
-        candidates.append(self.cluster)
-        if self.clusters is None:
-            self.clusters = self._room_clusters()
-        candidates.extend(self.clusters)
-        return list(dict.fromkeys(candidates))
+    def _get_device_info(self, check_existing: bool = True) -> dict:
+        if check_existing:
+            response = self.session.get(f"{self.device_url}/devices")
+            response.raise_for_status()
+            for device in response.json().get("devices", []):
+                if device["name"] == DEVICE_DATA["name"]:
+                    self.device_info = device
+                    return device
 
-    def get_message(self, activity):
-        # A space shared with another org keeps that org's cluster, not the bot's.
-        for _ in range(2):
-            for cluster in self._candidate_clusters(activity):
-                hydra_id = base64.b64encode(f"ciscospark://{cluster}/MESSAGE/{activity['id']}".encode()).decode()
-                response = self.session.get(f"{API_URL}/messages/{hydra_id}")
-                if response.ok:
-                    return response.json()
-            self.clusters = None
-        log.warning(f"Could not read message {activity['id']} in any known cluster")
-        return None
+        response = self.session.post(f"{self.device_url}/devices", json=DEVICE_DATA)
+        response.raise_for_status()
+        self.device_info = response.json()
+        return self.device_info
 
-    def send_message(self, room_id, text):
-        # POST a text message back into the same space.
-        self.session.post(f"{API_URL}/messages", json={"roomId": room_id, "text": text})
+    def _get_base64_message_id(self, activity: dict) -> str:
+        activity_id = activity["id"]
+        conversation_url = activity["target"]["url"]
+        conv_target_id = activity["target"]["id"]
+        verb = "messages" if activity["verb"] in ["post", "update"] else "attachment/actions"
+        if activity["verb"] == "update" and self.share_id is not None:
+            activity_id = self.share_id
+            self.share_id = None
 
-    async def listen(self):
-        # 1) Ask the catalog where device registration lives for this org.
-        wdm_url = self.session.get(CATALOG_URL).json()["serviceLinks"]["wdm"]
-        # 2) Register a device; the response includes the Mercury WebSocket URL.
-        device = self.session.post(f"{wdm_url}/devices", json=DEVICE_DATA).json()
-        # 3) Verify TLS with certifi (Python's default store often misses these CAs).
-        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        conversation_message_url = conversation_url.replace(
+            f"conversations/{conv_target_id}", f"{verb}/{activity_id}"
+        )
+        conversation_message = self.session.get(conversation_message_url).json()
+        return conversation_message["id"]
 
-        async with websockets.connect(device["webSocketUrl"], ssl=ssl_context) as ws:
-            # 4) Authorize the socket with the bot token before events start flowing.
-            await ws.send(json.dumps({
+    def _ack_message(self, message_id: str) -> None:
+        ack_message = {"type": "ack", "messageId": message_id}
+        asyncio.run(self.websocket.send(json.dumps(ack_message)))
+
+    def _process_incoming_websocket_message(self, msg: dict) -> None:
+        data = msg.get("data", {})
+        if data.get("eventType") != "conversation.activity":
+            return
+
+        activity = data["activity"]
+        verb = activity.get("verb")
+
+        if verb == "share":
+            self.share_id = activity["id"]
+            return
+
+        if verb == "post":
+            message_id = self._get_base64_message_id(activity)
+            webex_message = self.api.messages.get(message_id)
+            self._ack_message(message_id)
+            if self.on_message:
+                self.on_message(webex_message, activity)
+            return
+
+        if verb == "update":
+            obj = activity.get("object", {})
+            if obj.get("objectType") != "content" or obj.get("contentCategory") != "documents":
+                return
+            message_id = self._get_base64_message_id(activity)
+            webex_message = self.api.messages.get(message_id)
+            self._ack_message(message_id)
+            if self.on_message:
+                self.on_message(webex_message, activity)
+            return
+
+        if verb == "cardAction":
+            message_id = self._get_base64_message_id(activity)
+            attachment_action = self.api.attachment_actions.get(message_id)
+            self._ack_message(message_id)
+            if self.on_card_action:
+                self.on_card_action(attachment_action, activity)
+
+    async def _connect_and_listen(self) -> None:
+        ws_url = self.device_info["webSocketUrl"]
+        async with websockets.connect(ws_url, ssl=ssl_context, extra_headers=self._headers()) as websocket:
+            self.websocket = websocket
+            print("WebSocket connected")
+            auth = {
                 "id": str(uuid.uuid4()),
                 "type": "authorization",
                 "data": {"token": f"Bearer {self.access_token}"},
-            }))
-            # 5) Fetch each new post in plaintext and hand it to the bot.
-            async for raw in ws:
-                data = json.loads(raw).get("data", {})
-                if data.get("eventType") != "conversation.activity":
-                    continue
-                activity = data["activity"]
-                # Only new posts, and never the bot's own replies (avoids an echo loop).
-                if activity["verb"] != "post" or activity["actor"]["id"] == self.person_uuid:
-                    continue
-                message = self.get_message(activity)
-                if message:
-                    self.on_message(message)
+            }
+            await websocket.send(json.dumps(auth))
 
-    def run(self):
-        asyncio.run(self.listen())
+            while True:
+                raw = await websocket.recv()
+                msg = json.loads(raw)
+                loop = asyncio.get_event_loop()
+                loop.run_in_executor(None, self._process_incoming_websocket_message, msg)
+
+    def run(self) -> None:
+        if self.device_info is None and self._get_device_info() is None:
+            raise RuntimeError("Unable to register bot device for WebSocket connection")
+
+        while True:
+            try:
+                asyncio.get_event_loop().run_until_complete(self._connect_and_listen())
+            except Exception as exc:
+                logger.warning("WebSocket connection error: %s", exc)
+                self._get_device_info(check_existing=False)
+                asyncio.get_event_loop().run_until_complete(asyncio.sleep(5))
+
