@@ -11,6 +11,7 @@ WebSocket client
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
 import ssl
@@ -59,6 +60,9 @@ class WebSocketClient:
         self.api._session.update_headers(self._headers())
         self.on_message = on_message
         self.on_card_action = on_card_action
+        # Activities carry the actor's UUID, so decode it from the bot's base64 person ID.
+        self.me = self.api.people.me()
+        self.person_uuid = base64.b64decode(self.me.id + "==").decode().split("/")[-1]
         self.device_info = None
         self.device_url = self._get_device_url()
         self.websocket = None
@@ -120,6 +124,10 @@ class WebSocketClient:
         activity = data["activity"]
         verb = activity.get("verb")
 
+        # Never react to the bot's own activity (avoids an echo loop).
+        if activity.get("actor", {}).get("id") == self.person_uuid:
+            return
+
         if verb == "share":
             self.share_id = activity["id"]
             return
@@ -128,6 +136,7 @@ class WebSocketClient:
             message_id = self._get_base64_message_id(activity)
             webex_message = self.api.messages.get(message_id)
             self._ack_message(message_id)
+            print(f"Message received from {webex_message.personEmail}: {webex_message.text}")
             if self.on_message:
                 self.on_message(webex_message, activity)
             return
@@ -139,6 +148,7 @@ class WebSocketClient:
             message_id = self._get_base64_message_id(activity)
             webex_message = self.api.messages.get(message_id)
             self._ack_message(message_id)
+            print(f"File message received from {webex_message.personEmail}: {webex_message.text}")
             if self.on_message:
                 self.on_message(webex_message, activity)
             return
@@ -147,6 +157,7 @@ class WebSocketClient:
             message_id = self._get_base64_message_id(activity)
             attachment_action = self.api.attachment_actions.get(message_id)
             self._ack_message(message_id)
+            print(f"Card action received: {attachment_action.inputs}")
             if self.on_card_action:
                 self.on_card_action(attachment_action, activity)
 
@@ -154,7 +165,7 @@ class WebSocketClient:
         ws_url = self.device_info["webSocketUrl"]
         async with websockets.connect(ws_url, ssl=ssl_context, additional_headers=self._headers()) as websocket:
             self.websocket = websocket
-            print("WebSocket connected")
+            print(f"WebSocket connected as {self.me.displayName}, waiting for messages...")
             auth = {
                 "id": str(uuid.uuid4()),
                 "type": "authorization",
@@ -166,7 +177,14 @@ class WebSocketClient:
                 raw = await websocket.recv()
                 msg = json.loads(raw)
                 loop = asyncio.get_event_loop()
-                loop.run_in_executor(None, self._process_incoming_websocket_message, msg)
+                loop.run_in_executor(None, self._safe_process, msg)
+
+    def _safe_process(self, msg: dict) -> None:
+        # Errors raised in executor threads are otherwise discarded silently.
+        try:
+            self._process_incoming_websocket_message(msg)
+        except Exception:
+            logger.exception("Failed to process incoming WebSocket message")
 
     def run(self) -> None:
         if self.device_info is None and self._get_device_info() is None:
