@@ -94,4 +94,3 @@ bot = WebSocketClient(access_token=bot_token,         # Authenticate the bot usi
 # Start the bot and make it listen for incoming messages.
 # This call is typically blocking and keeps the bot running, waiting for commands or card submissions.
 bot.run()
-
