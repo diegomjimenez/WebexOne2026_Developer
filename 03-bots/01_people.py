@@ -9,42 +9,57 @@ Find people in the organization using the Webex People API.
 """
 
 import os
-
 from dotenv import load_dotenv
-from webexpythonsdk import WebexAPI
+from webexpythonsdk import WebexAPI # Import the WebexAPI class from the Webex Python SDK
 
+# Load environment variables from the .env file.
 load_dotenv()
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-EMAIL = os.getenv("EMAIL")
-DOMAIN = os.getenv("DOMAIN")
+# Webex Bot Token for API authentication.
+bot_token = os.getenv("BOT_TOKEN")
+# Email address for user lookup.
+email = os.getenv("EMAIL")
 
-webex = WebexAPI(BOT_TOKEN)
+# Initialize the WebexAPI client with the bot token.
+webex = WebexAPI(bot_token)
 
-
-def find_people(display_name: str) -> None:
-    """Find people by display name."""
-    try:
-        for person in webex.people.list(displayName=display_name):
-            print(f"Name: {person.displayName}, Email: {person.emails}")
-    except Exception as exc:
-        print(f"An error occurred: {exc}")
-
-
-def all_people() -> None:
-    """List all people in the organization.
-
-    Requires admin privileges and will not work with a standard bot token.
+def all_people():
+    """
+    Retrieves and prints the display name and email(s) for all people
+    accessible by the authenticated Webex bot/user.
     """
     try:
-        for person in webex.people.list():
+        # List all people in the organization.
+        # webex.people.list() returns a GeneratorContainer, which is iterable.
+        all_people_iterator = webex.people.list()
+        # Iterate through the people and print their details.
+        for person in all_people_iterator:
             print(f"Name: {person.displayName}, Email: {person.emails}")
-    except Exception as exc:
-        print(f"An error occurred: {exc}")
+    except Exception as e:
+        # Catch and print any exceptions that occur during the API call.
+        print(f"An error occurred while listing all people: {e}")
 
+def find_people(email_address: str):
+    """
+    Finds and prints the display name and email(s) for a specific person
+    based on their email address.
 
-if __name__ == "__main__":
-    if EMAIL:
-        find_people(EMAIL.split("@")[0])
-    if DOMAIN:
-        print(f"\nLab domain: {DOMAIN}")
+    Args:
+        email_address (str): The email address of the person to find.
+    """
+    try:
+        # List people, filtering by the provided email address.
+        # webex.people.list() returns a GeneratorContainer, which is iterable.
+        found_people_iterator = webex.people.list(email=email_address)
+        # Iterate through the (potentially single) person found and print their details.
+        for person in found_people_iterator:
+            print(f"Name: {person.displayName}, Email: {person.emails}")
+    except Exception as e:
+        # Catch and print any exceptions that occur during the API call.
+        print(f"An error occurred while finding people by email: {e}")
+
+# Call the find_people function using the email loaded from environment variables.
+find_people(email_address=email)
+
+# Call the all_people function to list all accessible users.
+all_people()
