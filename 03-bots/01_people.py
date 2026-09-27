@@ -1,4 +1,12 @@
-"""Find people in the organization using the Webex People API."""
+"""
+Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+
+- Diego Manuel Jimenez Moreno
+- Phil Bellanti
+- Adam Weeks
+
+Find people in the organization using the Webex People API.
+"""
 
 import os
 
