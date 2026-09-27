@@ -5,7 +5,7 @@ Webex One 2026 - Exploring the Webex Developer Ecosystem
 - Phil Bellanti
 - Adam Weeks
 
-Webex WebSocket client: register a device and deliver incoming message events.
+WebSocket client
 """
 
 from __future__ import annotations
@@ -81,11 +81,12 @@ class WebSocketClient:
     def _get_device_info(self, check_existing: bool = True) -> dict:
         if check_existing:
             response = self.session.get(f"{self.device_url}/devices")
-            response.raise_for_status()
-            for device in response.json().get("devices", []):
-                if device["name"] == DEVICE_DATA["name"]:
-                    self.device_info = device
-                    return device
+            if response.status_code != 404:
+                response.raise_for_status()
+                for device in response.json().get("devices", []):
+                    if device["name"] == DEVICE_DATA["name"]:
+                        self.device_info = device
+                        return device
 
         response = self.session.post(f"{self.device_url}/devices", json=DEVICE_DATA)
         response.raise_for_status()
@@ -151,7 +152,7 @@ class WebSocketClient:
 
     async def _connect_and_listen(self) -> None:
         ws_url = self.device_info["webSocketUrl"]
-        async with websockets.connect(ws_url, ssl=ssl_context, extra_headers=self._headers()) as websocket:
+        async with websockets.connect(ws_url, ssl=ssl_context, additional_headers=self._headers()) as websocket:
             self.websocket = websocket
             print("WebSocket connected")
             auth = {
@@ -178,4 +179,3 @@ class WebSocketClient:
                 logger.warning("WebSocket connection error: %s", exc)
                 self._get_device_info(check_existing=False)
                 asyncio.get_event_loop().run_until_complete(asyncio.sleep(5))
-
