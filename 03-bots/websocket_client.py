@@ -1,4 +1,12 @@
-"""WebSocket client used by the Lab 3 bot exercises."""
+"""
+Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+
+- Diego Manuel Jimenez Moreno
+- Phil Bellanti
+- Adam Weeks
+
+WebSocket client
+"""
 
 from __future__ import annotations
 
