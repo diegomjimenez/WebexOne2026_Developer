@@ -1,5 +1,5 @@
 """
-Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+Webex One 2026 - Exploring the Webex Developer Ecosystem
 
 - Diego Manuel Jimenez Moreno
 - Phil Bellanti
