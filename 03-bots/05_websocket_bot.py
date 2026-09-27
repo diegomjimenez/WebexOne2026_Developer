@@ -26,10 +26,12 @@ def handle_message(message, activity):
     """
     room_id = message.roomId
     text = (getattr(message, "text", "") or "").strip()
-    
-    if text:
+    # Formatted messages keep their markdown in a separate field; plain ones only have text.
+    content = getattr(message, "markdown", None) or text
+
+    if content:
         # Echo back what they said
-        send_message(api, room_id, f"Echo: {text}")
+        send_message(api, room_id, f"Echo: {content}")
 
 # Create a WebSocket Client object.
 bot = WebSocketClient(access_token=bot_token,         # Authenticate the bot with the provided token.
