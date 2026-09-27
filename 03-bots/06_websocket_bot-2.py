@@ -1,5 +1,5 @@
 """
-Webex One 2026 - Exploring the possibilities of Webex APIs
+Webex One 2026 - Exploring the Webex Developer Ecosystem
 
 - Diego Manuel Jimenez Moreno
 - Phil Bellanti
