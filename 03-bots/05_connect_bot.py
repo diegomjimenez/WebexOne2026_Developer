@@ -1,4 +1,12 @@
-"""Exercise 3.5 - Connect the bot and respond to incoming messages."""
+"""
+Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+
+- Diego Manuel Jimenez Moreno
+- Phil Bellanti
+- Adam Weeks
+
+Connect the bot and respond to incoming messages.
+"""
 
 import os
 
