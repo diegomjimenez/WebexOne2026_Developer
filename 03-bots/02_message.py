@@ -17,57 +17,76 @@ load_dotenv()
 
 # Webex Bot Token for API authentication.
 bot_token = os.getenv("BOT_TOKEN")
-# Email address for user lookup and message recipient.
+# Your email address, used to find your user ID.
 email = os.getenv("EMAIL")
 
-# Initialize the main WebexAPI client with the bot token.
+# Initialize the WebexAPI client with the bot token.
 webex = WebexAPI(bot_token)
 
-def send_teams_message(bot_token: str, message: str, person_email: str):
+def create_webex_room(room_title: str):
     """
-    Sends a direct message to a specified person via Webex Teams.
+    Creates a new Webex room with the given title.
 
     Args:
-        bot_token (str): The authentication token for the Webex bot.
-        message (str): The content of the message to send (supports Markdown).
-        person_email (str): The email address of the recipient.
-    """
-    # Initialize a new WebexAPI client for sending messages.
-    webexbot = WebexAPI(bot_token)
-    # Create a direct message to the specified person's email with the given markdown content.
-    webexbot.messages.create(toPersonEmail=person_email, markdown=message)
-
-def find_people(email_address: str):
-    """
-    Finds a person by their email address using the Webex API.
-
-    Args:
-        email_address (str): The email address of the person to find.
+        room_title (str): The title for the new Webex room.
 
     Returns:
-        webexpythonsdk.models.Person: The first person object found, or None if an error occurs or no person is found.
+        webexpythonsdk.models.Room: The created room object if successful, None otherwise.
     """
     try:
-        # List people, filtering by the provided email address.
-        # webex.people.list() returns a GeneratorContainer, so convert it to a list for indexing.
-        found_people = list(webex.people.list(email=email_address))
-        
-        # Return the first person object found.
-        if found_people:
-            return found_people[0]
-        else:
-            print(f"No person found with email: {email_address}.")
-            return None
+        print(f"Attempting to create room with title: '{room_title}'...")
+        new_room = webex.rooms.create(title=room_title)
+        print(f"Room created successfully! Room ID: {new_room.id}, Title: {new_room.title}")
+        return new_room
     except Exception as e:
-        # Catch and print any exceptions that occur during the API call.
-        print(f"An error occurred while finding people by email: {e}")
+        print(f"An error occurred while creating the room: {e}")
         return None
 
-# Find the person associated with the email loaded from environment variables.
-person = find_people(email_address=email)
+def add_person_to_room(room_id: str, person_email: str):
+    """
+    Finds a person by their email and adds them to a specified Webex room.
 
-# If a person was found, send them a personalized message.
-if person:
-    send_teams_message(bot_token, f"Hello {person.displayName}!", person.emails[0])
+    Args:
+        room_id (str): The ID of the room to add the person to.
+        person_email (str): The email address of the person to add.
+
+    Returns:
+        webexpythonsdk.models.Membership: The membership object if successful, None otherwise.
+    """
+    try:
+        # 1. Find the user by email to get their person ID
+        print(f"Attempting to find user with email: '{person_email}'...")
+        # webex.people.list() returns a GeneratorContainer, which is iterable.
+        found_people = list(webex.people.list(email=person_email))
+        
+        if found_people:
+            # Assuming the first result is the correct person
+            person_to_add = found_people[0]
+            print(f"Found user: {person_to_add.displayName}, Person ID: {person_to_add.id}")
+
+            # 2. Add the user to the specified room
+            print(f"Attempting to add {person_to_add.displayName} to room ID: '{room_id}'...")
+            membership = webex.memberships.create(
+                roomId=room_id,
+                personId=person_to_add.id
+            )
+            print(f"User '{person_to_add.displayName}' added to room successfully! Membership ID: {membership.id}")
+            return membership
+        else:
+            print(f"Error: Could not find any user with email '{person_email}'. Cannot add to room.")
+            return None
+    except Exception as e:
+        print(f"An error occurred while adding person to room: {e}")
+        return None
+
+# Define the title for your new room.
+new_room_name = "WebexOne2025 Room"
+
+# Step 1: Create the room
+created_room = create_webex_room(new_room_name)
+
+# Step 2: If the room was created successfully, add yourself to it.
+if created_room:
+    add_person_to_room(created_room.id, email)
 else:
-    print(f"Could not find a person with email: {email}. Message not sent.")
+    print("Room creation failed, cannot proceed to add members.")
