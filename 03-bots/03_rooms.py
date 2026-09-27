@@ -1,4 +1,12 @@
-"""Create a room and add your lab user to it."""
+"""
+Webex One 2026 - Troubleshoot and Manage Your Organization with an AI Assistant
+
+- Diego Manuel Jimenez Moreno
+- Phil Bellanti
+- Adam Weeks
+
+Create a room and add your lab user to it.
+"""
 
 import os
 
