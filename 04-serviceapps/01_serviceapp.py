@@ -14,16 +14,6 @@ import os
 import datetime
 from dotenv import load_dotenv
 
-# This environment variable is often set for local development to allow insecure HTTP for OAuth.
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
-
-'''
-The below values are produced by registering a service app on Webex Developer Portal @ developer.webex.com
-The scopes selected for this app to run must be meeting:admin_schedule_write due to the 
-impersonation functionality set in the create meeting API call that is happening via the 
-hostEmail parameter being set. 
-replace the below values once the service app is registered and the app is authorized by an org admin
-'''
 # Load environment variables from the .env file
 load_dotenv()
 
